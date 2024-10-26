@@ -1,131 +1,19 @@
-# cluster-config
-  
-Using shell script, we have set the subnet id to be automatically inserted.
-  
-```sh
-#!/bin/bash
+# Kubernetes
 
-VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=demo-vpc" --query "Vpcs[*].VpcId" --output text)
+Kubernetes, also known as K8s, is an open source system for automating deployment, scaling, and management of containerized applications.
 
-PUBLIC_SUBNET_A=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" "Name=mapPublicIpOnLaunch,Values=true" --query "Subnets[0].SubnetId" --output text)
+It groups containers that make up an application into logical units for easy management and discovery. Kubernetes builds upon 15 years of experience of running production workloads at Google, combined with best-of-breed ideas and practices from the community.
 
-PUBLIC_SUBNET_C=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" "Name=mapPublicIpOnLaunch,Values=true" --query "Subnets[1].SubnetId" --output text)
+	
+Planet Scale
+Designed on the same principles that allow Google to run billions of containers a week, Kubernetes can scale without increasing your operations team.
 
-PRIVATE_SUBNET_A=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" "Name=mapPublicIpOnLaunch,Values=false" --query "Subnets[0].SubnetId" --output text)
+	
+Never Outgrow
+Whether testing locally or running a global enterprise, Kubernetes flexibility grows with you to deliver your applications consistently and easily no matter how complex your need is.
 
-PRIVATE_SUBNET_C=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" "Name=mapPublicIpOnLaunch,Values=false" --query "Subnets[1].SubnetId" --output text)
+	
+Run K8s Anywhere
+Kubernetes is open source giving you the freedom to take advantage of on-premises, hybrid, or public cloud infrastructure, letting you effortlessly move workloads to where it matters to you.
 
-cat << EOF > cluster-config.yaml
-apiVersion: eksctl.io/v1alpha5
-kind: ClusterConfig
-
-metadata:
-  name: test-cluster
-  version: "1.31"
-  region: ap-northeast-2
-
-vpc:
-  subnets:
-    public:
-      public-a: { id: ${PUBLIC_SUBNET_A} }
-      public-c: { id: ${PUBLIC_SUBNET_C} }
-    private:
-      private-a: { id: ${PRIVATE_SUBNET_A} }
-      private-c: { id: ${PRIVATE_SUBNET_C} }
-
-iamIdentityMappings:
-  - arn: arn:aws:iam::226347592148:role/root
-    groups:
-      - system:masters
-    username: admin
-    noDuplicateARNs: true # prevents shadowing of ARNs
-
-iam:
-  withOIDC: true
-  serviceAccounts:
-  - metadata:
-      name: appmesh-controller
-      namespace: appmesh-system
-    attachPolicyARNs:
-      - "arn:aws:iam::aws:policy/AWSCloudMapFullAccess"
-      - "arn:aws:iam::aws:policy/AWSAppMeshFullAccess"
-  - metadata:
-      name: aws-load-balancer-controller
-      namespace: kube-system
-    wellKnownPolicies:
-      awsLoadBalancerController: true
-  - metadata:
-      name: ebs-csi-controller-sa
-      namespace: kube-system
-    wellKnownPolicies:
-      ebsCSIController: true
-  - metadata:
-      name: efs-csi-controller-sa
-      namespace: kube-system
-    wellKnownPolicies:
-      efsCSIController: true
-  - metadata:
-      name: external-dns
-      namespace: kube-system
-    wellKnownPolicies:
-      externalDNS: true
-  - metadata:
-      name: cert-manager
-      namespace: cert-manager
-    wellKnownPolicies:
-      certManager: true
-  - metadata:
-      name: cluster-autoscaler
-      namespace: kube-system
-      labels: {aws-usage: "cluster-ops"}
-    wellKnownPolicies:
-      autoScaler: true
-  - metadata:
-      name: build-service
-      namespace: ci-cd
-    wellKnownPolicies:
-      imageBuilder: true
-  - metadata:
-      name: autoscaler-service
-      namespace: kube-system
-    attachPolicy:
-      Version: "2012-10-17"
-      Statement:
-      - Effect: Allow
-        Action:
-        - "autoscaling:DescribeAutoScalingGroups"
-        - "autoscaling:DescribeAutoScalingInstances"
-        - "autoscaling:DescribeLaunchConfigurations"
-        - "autoscaling:DescribeTags"
-        - "autoscaling:SetDesiredCapacity"
-        - "autoscaling:TerminateInstanceInAutoScalingGroup"
-        - "ec2:DescribeLaunchTemplateVersions"
-        Resource: '*'
-
-managedNodeGroups:
-  - name: test-app-ng
-    labels: { role: apps }
-    instanceType: t3.medium
-    instanceName: test-app-ng
-    desiredCapacity: 2
-    minSize: 2
-    maxSize: 20
-    privateNetworking: true
-    volumeType: gp3
-    volumeEncrypted: true
-    subnets:
-      - private-a
-      - private-b
-    tags:
-      k8s.io/cluster-autoscaler/enabled: "true"
-      k8s.io/cluster-autoscaler/wsi-cluster: "owned"
-    iam:
-      withAddonPolicies:
-        imageBuilder: true
-        externalDNS: true
-        certManager: true
-        cloudWatch: true
-EOF
-
-eksctl create cluster -f cluster-config.yaml
-```
+To download Kubernetes, visit the download section.
