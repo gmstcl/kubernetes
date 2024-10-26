@@ -1,37 +1,19 @@
-# cluster-config
-  
-Using shell script, we have set the subnet id to be automatically inserted.
-  
-```sh
-#!/bin/bash
-
-VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=demo-vpc" --query "Vpcs[*].VpcId" --output text)
-
-PUBLIC_SUBNET_A=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" "Name=mapPublicIpOnLaunch,Values=true" --query "Subnets[0].SubnetId" --output text)
-
-PUBLIC_SUBNET_C=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" "Name=mapPublicIpOnLaunch,Values=true" --query "Subnets[1].SubnetId" --output text)
-
-PRIVATE_SUBNET_A=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" "Name=mapPublicIpOnLaunch,Values=false" --query "Subnets[0].SubnetId" --output text)
-
-PRIVATE_SUBNET_C=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" "Name=mapPublicIpOnLaunch,Values=false" --query "Subnets[1].SubnetId" --output text)
-
-cat << EOF > cluster-config.yaml
 apiVersion: eksctl.io/v1alpha5
 kind: ClusterConfig
 
 metadata:
-  name: test-cluster
+  name: demo-cluster
   version: "1.31"
   region: ap-northeast-2
 
 vpc:
   subnets:
     public:
-      public-a: { id: ${PUBLIC_SUBNET_A} }
-      public-c: { id: ${PUBLIC_SUBNET_C} }
+      public-a: { id: subnet-0de093db087b818a0 }
+      public-b: { id: subnet-0d3de82ba4d6b9370 }
     private:
-      private-a: { id: ${PRIVATE_SUBNET_A} }
-      private-c: { id: ${PRIVATE_SUBNET_C} }
+      private-a: { id: subnet-0582f5b2cf19554e8 }
+      private-b: { id: subnet-0035d77753e619793 }
 
 iamIdentityMappings:
   - arn: arn:aws:iam::226347592148:role/root
@@ -103,10 +85,10 @@ iam:
         Resource: '*'
 
 managedNodeGroups:
-  - name: test-app-ng
+  - name: demo-app-ng
     labels: { role: apps }
     instanceType: t3.medium
-    instanceName: test-app-ng
+    instanceName: demo-app-ng
     desiredCapacity: 2
     minSize: 2
     maxSize: 20
@@ -125,7 +107,3 @@ managedNodeGroups:
         externalDNS: true
         certManager: true
         cloudWatch: true
-EOF
-
-eksctl create cluster -f cluster-config.yaml
-```
