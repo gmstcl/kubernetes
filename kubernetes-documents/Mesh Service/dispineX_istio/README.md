@@ -28,3 +28,67 @@ The preview profile contains features that are experimental. This is intended to
 <p align="center">
   <img src="./photo/profile.png" alt="Architecture">
 </p>
+
+## “DEMO” Profile vs “DEFAULT” Profile
+You can display the profile settings by running the following command.
+
+For Demo Profile settings 
+
+```sh
+istioctl profile dump demo 
+```
+
+For Default Profile settings 
+
+```sh
+istioctl profile dump default
+```
+
+According to the above Scenario, if we need to reduce the amount of memory to 150Mi which requests by the istiod component, we can configure it as follows:
+
+```sh
+istioctl install --set values.pilot.resources.requests.memory=150Mi
+```
+
+## Installation of version-istio
+
+Download the best version.
+
+```sh 
+curl -L https://istio.io/downloadIstio | sh -
+```
+
+Download to the version you want.
+
+```sh
+curl -L https://istio.io/downloadIstio | ISTIO_VERSION=1.23.2 TARGET_ARCH=x86_64 sh -
+```
+
+Set the environment variable path to use isioctl.
+
+```sh
+echo "export PATH=$HOME/istio-1.23.2/bin:$PATH" >> .bashrc
+source .bashrc
+```
+
+check 
+
+```sh
+istioctl --help
+```
+
+Install the control plane of the isio in the cluster.  
+If you install without options, download the default profile with only the isiod and ingress gateway.
+
+```sh 
+default profile command : istioctl install
+demo profile command : istioctl install --set profile=demo
+```
+
+When the installation is complete, you can view the components of the Istio created in the Istio-system namespace.
+
+The isio creates a proxy in each pod for data plane configuration. There are many different ways to generate a proxy, but we will use the method of automatically injecting a proxy container. Labeling the namespace you want to generate a proxy automatically creates a proxy along with the pod generation.
+
+```sh 
+kubectl label ns default istio-injection=enabled
+```
