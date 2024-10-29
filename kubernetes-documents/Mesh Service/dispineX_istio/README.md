@@ -9,19 +9,19 @@ There are different built-in configuration profiles for Istio. The following bui
 1. Default  
 This enables components according to the default settings of the IstioOperator API. This profile is recommended for production deployments and for primary clusters in a multi-cluster mesh.
   
-2. Demo
+2. Demo  
 This configuration designed to showcase Istio functionality with modest resource requirements. It is suitable to run the Bookinfo application ( Sample application Istio provides — [Build Istio service mesh with Bookinfo application](https://medium.com/@gimhanranasinghe/the-istio-service-mesh-building-service-mesh-on-istio-part-1-8ca060bffc27) ) and associated tasks. This profile enables high levels of tracing and access logging so it is not suitable for performance tests.
   
-3. Minimal
+3. Minimal  
 This is same as the default profile, but only the control plane components are installed. This allows you to configure the control plane and data plane components (e.g., gateways) using separate profiles.
   
-4. Remote
+4. Remote  
 This is used for configuring a remote cluster that is managed by an external control plane or by a control plane in a primary cluster of a multi-cluster mesh.
   
-5. Empty
+5. Empty  
 This deploys nothing. This can be useful as a base profile for custom configuration.
   
-6. Preview
+6. Preview  
 The preview profile contains features that are experimental. This is intended to explore new features coming to Istio. Stability, security, and performance are not guaranteed — use at your own risk.
 
 
