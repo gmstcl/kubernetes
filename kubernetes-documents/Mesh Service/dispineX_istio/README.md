@@ -23,3 +23,8 @@ This deploys nothing. This can be useful as a base profile for custom configurat
   
 6. Preview
 The preview profile contains features that are experimental. This is intended to explore new features coming to Istio. Stability, security, and performance are not guaranteed — use at your own risk.
+
+
+<p align="center">
+  <img src="./photo/profile.png" alt="Architecture">
+</p>
