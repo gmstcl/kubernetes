@@ -26,7 +26,7 @@ The preview profile contains features that are experimental. This is intended to
 
 
 <p align="center">
-  <img src="./readme/profile.png" alt="Architecture">
+  <img src="./profile.png" alt="Architecture">
 </p>
 
 ## “DEMO” Profile vs “DEFAULT” Profile
