@@ -32,3 +32,7 @@ spec:
       port: 80
       targetPort: 20001
 ```
+
+<p align="center">
+  <img src="./image.png" alt="Architecture">
+</p>
