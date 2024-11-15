@@ -15,3 +15,9 @@ echo "-------------------------------------------------------"
 
 # Reference Site -> https://docs.aws.amazon.com/ko_kr/eks/latest/userguide/install-kubectl.html
 # Mapping with Cluster Command -> aws eks update-kubeconfig --region <region-code> --name <my-cluster
+
+# If you have an alias for kubectl, you can extend shell completion to work with that alias:
+
+echo 'alias k=kubectl' >>~/.bashrc
+echo 'complete -o default -F __start_kubectl k' >>~/.bashrc
+source ~/.bashrc
