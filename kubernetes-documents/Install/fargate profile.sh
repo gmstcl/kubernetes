@@ -1,6 +1,6 @@
 eksctl create fargateprofile \
-    --cluster doc-cluster \
-    --name fargate-skills \
-    --namespace skills \
+    --cluster demo-cluster \
+    --name fargate-demo \
+    --namespace demo \
     --labels app=other \
     --region ap-northeast-2
