@@ -4,196 +4,411 @@
 
 1. environmental variables
 
-    ```sh
-    CLUSTER_NAME=apdev-cluster
-    AWS_PARTITION="aws"
+```sh
+export KARPENTER_NAMESPACE="kube-system"
+export KARPENTER_VERSION="1.0.8"
+export K8S_VERSION="1.31"
 
-    AWS_REGION="$(aws configure list | grep region | tr -s " " | cut -d" " -f3)"
-
-    OIDC_ENDPOINT="$(aws eks describe-cluster --name ${CLUSTER_NAME} \
-    --query "cluster.identity.oidc.issuer" --output text)"
-
-    AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query 'Account' \
-    --output text)
-    ```
+export AWS_PARTITION="aws" # if you are not using standard partitions, you may need to configure to aws-cn / aws-us-gov
+export CLUSTER_NAME="demo-cluster"
+export AWS_DEFAULT_REGION="ap-northeast-2"
+export AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+export OIDC_ENDPOINT="$(aws eks describe-cluster --name ${CLUSTER_NAME} --query "cluster.identity.oidc.issuer" --output text)"
+export TEMPOUT="$(mktemp)"
+export ARM_AMI_ID="$(aws ssm get-parameter --name /aws/service/eks/optimized-ami/${K8S_VERSION}/amazon-linux-2-arm64/recommended/image_id --query Parameter.Value --output text)"
+export AMD_AMI_ID="$(aws ssm get-parameter --name /aws/service/eks/optimized-ami/${K8S_VERSION}/amazon-linux-2/recommended/image_id --query Parameter.Value --output text)"
+export GPU_AMI_ID="$(aws ssm get-parameter --name /aws/service/eks/optimized-ami/${K8S_VERSION}/amazon-linux-2-gpu/recommended/image_id --query Parameter.Value --output text)"
+```
 
 2. IAM Role create
 
-    ```sh
-    echo '{
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Principal": {
-                    "Service": "ec2.amazonaws.com"
-                },
-                "Action": "sts:AssumeRole"
-            }
-        ]
-    }' > node-trust-policy.json
-    aws iam create-role \
-        --role-name "KarpenterNodeRole-${CLUSTER_NAME}" \
-        --assume-role-policy-document file://node-trust-policy.json
+```sh
+echo '{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Principal": {
+                "Service": "ec2.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+        }
+    ]
+}' > node-trust-policy.json
+aws iam create-role \
+    --role-name "KarpenterNodeRole-${CLUSTER_NAME}" \
+    --assume-role-policy-document file://node-trust-policy.json
+aws iam attach-role-policy \
+    --role-name "KarpenterNodeRole-${CLUSTER_NAME}" \
+    --policy-arn arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+aws iam attach-role-policy \
+    --role-name "KarpenterNodeRole-${CLUSTER_NAME}" \
+    --policy-arn arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy   
+aws iam attach-role-policy \
+    --role-name "KarpenterNodeRole-${CLUSTER_NAME}" \
+    --policy-arn arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+aws iam attach-role-policy \
+    --role-name "KarpenterNodeRole-${CLUSTER_NAME}" \
+    --policy-arn arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+aws iam create-instance-profile \
+    --instance-profile-name "KarpenterNodeInstanceProfile-${CLUSTER_NAME}"
+aws iam add-role-to-instance-profile \
+    --instance-profile-name "KarpenterNodeInstanceProfile-${CLUSTER_NAME}" \
+    --role-name "KarpenterNodeRole-${CLUSTER_NAME}"
 
-    aws iam attach-role-policy \
-        --role-name "KarpenterNodeRole-${CLUSTER_NAME}" \
-        --policy-arn arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
-    aws iam attach-role-policy \
-        --role-name "KarpenterNodeRole-${CLUSTER_NAME}" \
-        --policy-arn arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy   
-    aws iam attach-role-policy \
-        --role-name "KarpenterNodeRole-${CLUSTER_NAME}" \
-        --policy-arn arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
-    aws iam attach-role-policy \
-        --role-name "KarpenterNodeRole-${CLUSTER_NAME}" \
-        --policy-arn arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
-
-    aws iam create-instance-profile \
-        --instance-profile-name "KarpenterNodeInstanceProfile-${CLUSTER_NAME}"
-    aws iam add-role-to-instance-profile \
-        --instance-profile-name "KarpenterNodeInstanceProfile-${CLUSTER_NAME}" \
-        --role-name "KarpenterNodeRole-${CLUSTER_NAME}"
-
-    cat << EOF > controller-trust-policy.json
-    {
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Principal": {
-                    "Federated": "arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/${OIDC_ENDPOINT#*//}"
-                },
-                "Action": "sts:AssumeRoleWithWebIdentity",
-                "Condition": {
-                    "StringEquals": {
-                        "${OIDC_ENDPOINT#*//}:aud": "sts.amazonaws.com",
-                        "${OIDC_ENDPOINT#*//}:sub": "system:serviceaccount:karpenter:karpenter"
-                    }
+cat << EOF > controller-trust-policy.json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Principal": {
+                "Federated": "arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/${OIDC_ENDPOINT#*//}"
+            },
+            "Action": "sts:AssumeRoleWithWebIdentity",
+            "Condition": {
+                "StringEquals": {
+                    "${OIDC_ENDPOINT#*//}:aud": "sts.amazonaws.com",
+                    "${OIDC_ENDPOINT#*//}:sub": "system:serviceaccount:kube-system:karpenter"
                 }
             }
-        ]
-    }
-    EOF
+        }
+    ]
+}
+EOF
 
-    aws iam create-role \
-        --role-name KarpenterControllerRole-${CLUSTER_NAME} \
-        --assume-role-policy-document file://controller-trust-policy.json
+aws iam create-role \
+    --role-name KarpenterControllerRole-${CLUSTER_NAME} \
+    --assume-role-policy-document file://controller-trust-policy.json
 
-    cat << EOF > controller-policy.json
-    {
-        "Statement": [
-            {
-                "Action": [
-                    "ssm:GetParameter",
-                    "ec2:DescribeImages",
-                    "ec2:RunInstances",
-                    "ec2:DescribeSubnets",
-                    "ec2:DescribeSecurityGroups",
-                    "ec2:DescribeLaunchTemplates",
-                    "ec2:DescribeInstances",
-                    "ec2:DescribeInstanceTypes",
-                    "ec2:DescribeInstanceTypeOfferings",
-                    "ec2:DescribeAvailabilityZones",
-                    "ec2:DeleteLaunchTemplate",
-                    "ec2:CreateTags",
-                    "ec2:CreateLaunchTemplate",
-                    "ec2:CreateFleet",
-                    "ec2:DescribeSpotPriceHistory",
-                    "pricing:GetProducts"
-                ],
-                "Effect": "Allow",
-                "Resource": "*",
-                "Sid": "Karpenter"
-            },
-            {
-                "Action": "ec2:TerminateInstances",
-                "Condition": {
-                    "StringLike": {
-                        "ec2:ResourceTag/Name": "*karpenter*"
-                    }
+cat << EOF > controller-policy.json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "AllowScopedEC2InstanceAccessActions",
+            "Effect": "Allow",
+            "Resource": [
+                "arn:aws:ec2:ap-northeast-2::image/*",
+                "arn:aws:ec2:ap-northeast-2::snapshot/*",
+                "arn:aws:ec2:ap-northeast-2:*:security-group/*",
+                "arn:aws:ec2:ap-northeast-2:*:subnet/*"
+            ],
+            "Action": [
+                "ec2:RunInstances",
+                "ec2:CreateFleet"
+            ]
+        },
+        {
+            "Sid": "AllowScopedEC2LaunchTemplateAccessActions",
+            "Effect": "Allow",
+            "Resource": "arn:aws:ec2:ap-northeast-2:*:launch-template/*",
+            "Action": [
+                "ec2:RunInstances",
+                "ec2:CreateFleet"
+            ],
+            "Condition": {
+                "StringEquals": {
+                    "aws:ResourceTag/kubernetes.io/cluster/ec2-user-karpenter-demo": "owned"
                 },
-                "Effect": "Allow",
-                "Resource": "*",
-                "Sid": "ConditionalEC2Termination"
-            },
-            {
-                "Effect": "Allow",
-                "Action": "iam:PassRole",
-                "Resource":     "arn:${AWS_PARTITION}:iam::${AWS_ACCOUNT_ID}:role/KarpenterNodeRole-${CLUSTER_NAM   E}",
-                "Sid": "PassNodeIAMRole"
-            },
-            {
-                "Effect": "Allow",
-                "Action": "eks:DescribeCluster",
-                "Resource":     "arn:${AWS_PARTITION}:eks:${AWS_REGION}:${AWS_ACCOUNT_ID}:cluster/${CLUSTER_NAME}   ",
-                "Sid": "EKSClusterEndpointLookup"
+                "StringLike": {
+                    "aws:ResourceTag/karpenter.sh/nodepool": "*"
+                }
             }
-        ],
-        "Version": "2012-10-17"
-    }
+        },
+        {
+            "Sid": "AllowScopedEC2InstanceActionsWithTags",
+            "Effect": "Allow",
+            "Resource": [
+                "arn:aws:ec2:ap-northeast-2:*:fleet/*",
+                "arn:aws:ec2:ap-northeast-2:*:instance/*",
+                "arn:aws:ec2:ap-northeast-2:*:volume/*",
+                "arn:aws:ec2:ap-northeast-2:*:network-interface/*",
+                "arn:aws:ec2:ap-northeast-2:*:launch-template/*",
+                "arn:aws:ec2:ap-northeast-2:*:spot-instances-request/*"
+            ],
+            "Action": [
+                "ec2:RunInstances",
+                "ec2:CreateFleet",
+                "ec2:CreateLaunchTemplate"
+            ],
+            "Condition": {
+                "StringEquals": {
+                    "aws:RequestTag/kubernetes.io/cluster/ec2-user-karpenter-demo": "owned",
+                    "aws:RequestTag/eks:eks-cluster-name": "ec2-user-karpenter-demo"
+                },
+                "StringLike": {
+                    "aws:RequestTag/karpenter.sh/nodepool": "*"
+                }
+            }
+        },
+        {
+            "Sid": "AllowScopedResourceCreationTagging",
+            "Effect": "Allow",
+            "Resource": [
+                "arn:aws:ec2:ap-northeast-2:*:fleet/*",
+                "arn:aws:ec2:ap-northeast-2:*:instance/*",
+                "arn:aws:ec2:ap-northeast-2:*:volume/*",
+                "arn:aws:ec2:ap-northeast-2:*:network-interface/*",
+                "arn:aws:ec2:ap-northeast-2:*:launch-template/*",
+                "arn:aws:ec2:ap-northeast-2:*:spot-instances-request/*"
+            ],
+            "Action": "ec2:CreateTags",
+            "Condition": {
+                "StringEquals": {
+                    "aws:RequestTag/kubernetes.io/cluster/ec2-user-karpenter-demo": "owned",
+                    "aws:RequestTag/eks:eks-cluster-name": "ec2-user-karpenter-demo",
+                    "ec2:CreateAction": [
+                        "RunInstances",
+                        "CreateFleet",
+                        "CreateLaunchTemplate"
+                    ]
+                },
+                "StringLike": {
+                    "aws:RequestTag/karpenter.sh/nodepool": "*"
+                }
+            }
+        },
+        {
+            "Sid": "AllowScopedResourceTagging",
+            "Effect": "Allow",
+            "Resource": "arn:aws:ec2:ap-northeast-2:*:instance/*",
+            "Action": "ec2:CreateTags",
+            "Condition": {
+                "StringEquals": {
+                    "aws:ResourceTag/kubernetes.io/cluster/ec2-user-karpenter-demo": "owned"
+                },
+                "StringLike": {
+                    "aws:ResourceTag/karpenter.sh/nodepool": "*"
+                },
+                "StringEqualsIfExists": {
+                    "aws:RequestTag/eks:eks-cluster-name": "ec2-user-karpenter-demo"
+                },
+                "ForAllValues:StringEquals": {
+                    "aws:TagKeys": [
+                        "eks:eks-cluster-name",
+                        "karpenter.sh/nodeclaim",
+                        "Name"
+                    ]
+                }
+            }
+        },
+        {
+            "Sid": "AllowScopedDeletion",
+            "Effect": "Allow",
+            "Resource": [
+                "arn:aws:ec2:ap-northeast-2:*:instance/*",
+                "arn:aws:ec2:ap-northeast-2:*:launch-template/*"
+            ],
+            "Action": [
+                "ec2:TerminateInstances",
+                "ec2:DeleteLaunchTemplate"
+            ],
+            "Condition": {
+                "StringEquals": {
+                    "aws:ResourceTag/kubernetes.io/cluster/ec2-user-karpenter-demo": "owned"
+                },
+                "StringLike": {
+                    "aws:ResourceTag/karpenter.sh/nodepool": "*"
+                }
+            }
+        },
+        {
+            "Sid": "AllowRegionalReadActions",
+            "Effect": "Allow",
+            "Resource": "*",
+            "Action": [
+                "ec2:DescribeAvailabilityZones",
+                "ec2:DescribeImages",
+                "ec2:DescribeInstances",
+                "ec2:DescribeInstanceTypeOfferings",
+                "ec2:DescribeInstanceTypes",
+                "ec2:DescribeLaunchTemplates",
+                "ec2:DescribeSecurityGroups",
+                "ec2:DescribeSpotPriceHistory",
+                "ec2:DescribeSubnets"
+            ],
+            "Condition": {
+                "StringEquals": {
+                    "aws:RequestedRegion": "ap-northeast-2"
+                }
+            }
+        },
+        {
+            "Sid": "AllowSSMReadActions",
+            "Effect": "Allow",
+            "Resource": "arn:aws:ssm:ap-northeast-2::parameter/aws/service/*",
+            "Action": "ssm:GetParameter"
+        },
+        {
+            "Sid": "AllowPricingReadActions",
+            "Effect": "Allow",
+            "Resource": "*",
+            "Action": "pricing:GetProducts"
+        },
+        {
+            "Sid": "AllowInterruptionQueueActions",
+            "Effect": "Allow",
+            "Resource": "arn:aws:sqs:ap-northeast-2:226347592148:ec2-user-karpenter-demo",
+            "Action": [
+                "sqs:DeleteMessage",
+                "sqs:GetQueueUrl",
+                "sqs:ReceiveMessage"
+            ]
+        },
+        {
+            "Sid": "AllowPassingInstanceRole",
+            "Effect": "Allow",
+            "Resource": "arn:aws:iam::226347592148:role/KarpenterNodeRole-ec2-user-karpenter-demo",
+            "Action": "iam:PassRole",
+            "Condition": {
+                "StringEquals": {
+                    "iam:PassedToService": "ec2.amazonaws.com"
+                }
+            }
+        },
+        {
+            "Sid": "AllowScopedInstanceProfileCreationActions",
+            "Effect": "Allow",
+            "Resource": "arn:aws:iam::226347592148:instance-profile/*",
+            "Action": [
+                "iam:CreateInstanceProfile"
+            ],
+            "Condition": {
+                "StringEquals": {
+                    "aws:RequestTag/kubernetes.io/cluster/ec2-user-karpenter-demo": "owned",
+                    "aws:RequestTag/eks:eks-cluster-name": "ec2-user-karpenter-demo",
+                    "aws:RequestTag/topology.kubernetes.io/region": "ap-northeast-2"
+                },
+                "StringLike": {
+                    "aws:RequestTag/karpenter.k8s.aws/ec2nodeclass": "*"
+                }
+            }
+        },
+        {
+            "Sid": "AllowScopedInstanceProfileTagActions",
+            "Effect": "Allow",
+            "Resource": "arn:aws:iam::226347592148:instance-profile/*",
+            "Action": [
+                "iam:TagInstanceProfile"
+            ],
+            "Condition": {
+                "StringEquals": {
+                    "aws:ResourceTag/kubernetes.io/cluster/ec2-user-karpenter-demo": "owned",
+                    "aws:ResourceTag/topology.kubernetes.io/region": "ap-northeast-2",
+                    "aws:RequestTag/kubernetes.io/cluster/ec2-user-karpenter-demo": "owned",
+                    "aws:RequestTag/eks:eks-cluster-name": "ec2-user-karpenter-demo",
+                    "aws:RequestTag/topology.kubernetes.io/region": "ap-northeast-2"
+                },
+                "StringLike": {
+                    "aws:ResourceTag/karpenter.k8s.aws/ec2nodeclass": "*",
+                    "aws:RequestTag/karpenter.k8s.aws/ec2nodeclass": "*"
+                }
+            }
+        },
+        {
+            "Sid": "AllowScopedInstanceProfileActions",
+            "Effect": "Allow",
+            "Resource": "arn:aws:iam::226347592148:instance-profile/*",
+            "Action": [
+                "iam:AddRoleToInstanceProfile",
+                "iam:RemoveRoleFromInstanceProfile",
+                "iam:DeleteInstanceProfile"
+            ],
+            "Condition": {
+                "StringEquals": {
+                    "aws:ResourceTag/kubernetes.io/cluster/ec2-user-karpenter-demo": "owned",
+                    "aws:ResourceTag/topology.kubernetes.io/region": "ap-northeast-2"
+                },
+                "StringLike": {
+                    "aws:ResourceTag/karpenter.k8s.aws/ec2nodeclass": "*"
+                }
+            }
+        },
+        {
+            "Sid": "AllowInstanceProfileReadActions",
+            "Effect": "Allow",
+            "Resource": "arn:aws:iam::226347592148:instance-profile/*",
+            "Action": "iam:GetInstanceProfile"
+        },
+        {
+            "Sid": "AllowAPIServerEndpointDiscovery",
+            "Effect": "Allow",
+            "Resource": "arn:aws:eks:ap-northeast-2:226347592148:cluster/ec2-user-karpenter-demo",
+            "Action": "eks:DescribeCluster"
+        }
+    ]
+}
     EOF
 
-    aws iam put-role-policy \
-        --role-name KarpenterControllerRole-${CLUSTER_NAME} \
-        --policy-name KarpenterControllerPolicy-${CLUSTER_NAME} \
-        --policy-document file://controller-policy.json
-    ```
+aws iam put-role-policy \
+    --role-name KarpenterControllerRole-${CLUSTER_NAME} \
+    --policy-name KarpenterControllerPolicy-${CLUSTER_NAME} \
+    --policy-document file://controller-policy.json
+```
 
 3. Tags Additional
 
-    ```sh
-    for NODEGROUP in $(aws eks list-nodegroups --cluster-name ${CLUSTER_NAME} \
-        --query 'nodegroups' --output text); do aws ec2 create-tags \
-            --tags "Key=karpenter.sh/discovery,Value=${CLUSTER_NAME}" \
-            --resources $(aws eks describe-nodegroup --cluster-name ${CLUSTER_NAME} \
-            --nodegroup-name $NODEGROUP --query 'nodegroup.subnets' --output text )
-    done    
-
-    NODEGROUP=$(aws eks list-nodegroups --cluster-name ${CLUSTER_NAME} \
-        --query 'nodegroups[0]' --output text)
-    LAUNCH_TEMPLATE=$(aws eks describe-nodegroup --cluster-name ${CLUSTER_NAME} \
-        --nodegroup-name ${NODEGROUP} --query 'nodegroup.launchTemplate.    {id:id,version:version}' \
-        --output text | tr -s "\t" ",")
-    # If your EKS setup is configured to use only Cluster security group, then please     execute -
-
-    SECURITY_GROUPS=$(aws eks describe-cluster \
-        --name ${CLUSTER_NAME} --query    "cluster.resourcesVpcConfig.clusterSecurityGroupId" --output text)
-    # If your setup uses the security groups in the Launch template of a managed node     group, then :
-    # SECURITY_GROUPS=$(aws ec2 describe-launch-template-versions \
-    #    --launch-template-id ${LAUNCH_TEMPLATE%,*} --versions ${LAUNCH_TEMPLATE#*,}    \
-    #    --query 'LaunchTemplateVersions[0].LaunchTemplateData.   [NetworkInterfaces[0].Groups||SecurityGroupIds]' \
-    #    --output text)
-
-    aws ec2 create-tags \
+```sh
+for NODEGROUP in $(aws eks list-nodegroups --cluster-name ${CLUSTER_NAME} \
+    --query 'nodegroups' --output text); do aws ec2 create-tags \
         --tags "Key=karpenter.sh/discovery,Value=${CLUSTER_NAME}" \
-        --resources ${SECURITY_GROUPS}
-    ```
+        --resources $(aws eks describe-nodegroup --cluster-name ${CLUSTER_NAME} \
+        --nodegroup-name $NODEGROUP --query 'nodegroup.subnets' --output text )
+done    
+NODEGROUP=$(aws eks list-nodegroups --cluster-name ${CLUSTER_NAME} \
+    --query 'nodegroups[0]' --output text)
+LAUNCH_TEMPLATE=$(aws eks describe-nodegroup --cluster-name ${CLUSTER_NAME} \
+    --nodegroup-name ${NODEGROUP} --query 'nodegroup.launchTemplate.{id:id,version:version}' \
+    --output text | tr -s "\t" ",")
+# If your EKS setup is configured to use only Cluster security group, then please execute -
+SECURITY_GROUPS=$(aws eks describe-cluster \
+    --name ${CLUSTER_NAME} --query "cluster.resourcesVpcConfig.clusterSecurityGroupId" --output text)
+# If your setup uses the security groups in the Launch template of a managed nodegroup, then :
+# SECURITY_GROUPS=$(aws ec2 describe-launch-template-versions \
+#    --launch-template-id ${LAUNCH_TEMPLATE%,*} --versions ${LAUNCH_TEMPLATE#*,}    \
+#    --query 'LaunchTemplateVersions[0].LaunchTemplateData.[NetworkInterfaces[0].Groups||SecurityGroupIds]' \
+#    --output text)
+aws ec2 create-tags \
+    --tags "Key=karpenter.sh/discovery,Value=${CLUSTER_NAME}" \
+    --resources ${SECURITY_GROUPS}
+```
+
+```sh 
+aws sqs create-queue --queue-name demo-cluster
+QUEUE_NAME=$(aws sqs list-queues --query "QueueUrls[]" --output text | awk -F '/' '{print $NF}')
+QUEUE_URL=$(aws sqs get-queue-url --queue-name $QUEUE_NAME --query 'QueueUrl' --output text)
+cat >sqs.json <<-EOT
+{
+  "Policy": "{ \"Version\": \"2008-10-17\", \"Id\": \"EC2InterruptionPolicy\", \"Statement\": [ { \"Effect\": \"Allow\", \"Principal\": { \"Service\": [ \"events.amazonaws.com\", \"sqs.amazonaws.com\" ] }, \"Action\": \"sqs:SendMessage\", \"Resource\": \"arn:aws:sqs:ap-northeast-2:226347592148:$QUEUE_NAME\" }, { \"Sid\": \"DenyHTTP\", \"Effect\": \"Deny\", \"Principal\": \"*\", \"Action\": \"sqs:*\", \"Resource\": \"arn:aws:sqs:ap-northeast-2:226347592148:$QUEUE_NAME\", \"Condition\": { \"Bool\": { \"aws:SecureTransport\": \"false\" } } } ] }"
+}
+EOT
+aws sqs set-queue-attributes --region ${AWS_DEFAULT_REGION} --queue-url ${QUEUE_URL} --attributes file://sqs.json
+```
 
 3. ConfigMap Setting
 
-    ```sh
-    kubectl edit configmap aws-auth -n kube-system
-
-    apiVersion: v1
-    data:
-      mapRoles: |
-        - groups:
-          - system:bootstrappers
-          - system:nodes
-          rolearn: arn:aws:iam::226347592148:role/dev-global-eks-node-iam-role
-          username: system:node:{{EC2PrivateDNSName}}
-    +   - groups:
-    +     - system:bootstrappers
-    +     - system:nodes
-    +     rolearn: arn:aws:iam::073762821266:role/KarpenterNodeRole-apdev-eks-cluster
-    +     username: system:node:{{EC2PrivateDNSName}}
-    kind: ConfigMap
-    metadata:
-      ...
-    :x
-    export KARPENTER_VERSION=v0.25.0
-    ```
+```sh
+kubectl edit configmap aws-auth -n kube-system
+apiVersion: v1
+data:
+  mapRoles: |
+    - groups:
+      - system:bootstrappers
+      - system:nodes
+      rolearn: arn:aws:iam::226347592148:role/dev-global-eks-node-iam-role
+      username: system:node:{{EC2PrivateDNSName}}
++   - groups:
++     - system:bootstrappers
++     - system:nodes
++     rolearn: arn:aws:iam::073762821266:role/KarpenterNodeRole-demo-cluster
++     username: system:node:{{EC2PrivateDNSName}}
+kind: ConfigMap
+metadata:
+  ...
+:x
+export KARPENTER_VERSION="1.0.8"
+```
 
 4. Karpenter apply 
 
