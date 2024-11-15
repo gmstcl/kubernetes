@@ -62,13 +62,13 @@
             {
                 "Effect": "Allow",
                 "Principal": {
-                    "Federated": "arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-    provider/${OIDC_ENDPOINT#*//}"
+                    "Federated": "arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/${OIDC_ENDPOINT#*//}"
                 },
                 "Action": "sts:AssumeRoleWithWebIdentity",
                 "Condition": {
                     "StringEquals": {
                         "${OIDC_ENDPOINT#*//}:aud": "sts.amazonaws.com",
-                        "${OIDC_ENDPOINT#*//}:sub":     "system:serviceaccount:karpenter:karpenter"
+                        "${OIDC_ENDPOINT#*//}:sub": "system:serviceaccount:karpenter:karpenter"
                     }
                 }
             }
