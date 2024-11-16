@@ -120,13 +120,13 @@
             {
                 "Effect": "Allow",
                 "Action": "iam:PassRole",
-                "Resource":     "arn:${AWS_PARTITION}:iam::${AWS_ACCOUNT_ID}:role/KarpenterNodeRole-${CLUSTER_NAM   E}",
+                "Resource": "arn:${AWS_PARTITION}:iam::${AWS_ACCOUNT_ID}:role/KarpenterNodeRole-${CLUSTER_NAME}",
                 "Sid": "PassNodeIAMRole"
             },
             {
                 "Effect": "Allow",
                 "Action": "eks:DescribeCluster",
-                "Resource":     "arn:${AWS_PARTITION}:eks:${AWS_REGION}:${AWS_ACCOUNT_ID}:cluster/${CLUSTER_NAME}   ",
+                "Resource": "arn:${AWS_PARTITION}:eks:${AWS_REGION}:${AWS_ACCOUNT_ID}:cluster/${CLUSTER_NAME}",
                 "Sid": "EKSClusterEndpointLookup"
             }
         ],
@@ -153,16 +153,16 @@
     NODEGROUP=$(aws eks list-nodegroups --cluster-name ${CLUSTER_NAME} \
         --query 'nodegroups[0]' --output text)
     LAUNCH_TEMPLATE=$(aws eks describe-nodegroup --cluster-name ${CLUSTER_NAME} \
-        --nodegroup-name ${NODEGROUP} --query 'nodegroup.launchTemplate.    {id:id,version:version}' \
+        --nodegroup-name ${NODEGROUP} --query 'nodegroup.launchTemplate.{id:id,version:version}' \
         --output text | tr -s "\t" ",")
-    # If your EKS setup is configured to use only Cluster security group, then please     execute -
+    # If your EKS setup is configured to use only Cluster security group, then please execute -
 
     SECURITY_GROUPS=$(aws eks describe-cluster \
-        --name ${CLUSTER_NAME} --query    "cluster.resourcesVpcConfig.clusterSecurityGroupId" --output text)
-    # If your setup uses the security groups in the Launch template of a managed node     group, then :
+        --name ${CLUSTER_NAME} --query "cluster.resourcesVpcConfig.clusterSecurityGroupId" --output text)
+    # If your setup uses the security groups in the Launch template of a managed nodegroup, then :
     # SECURITY_GROUPS=$(aws ec2 describe-launch-template-versions \
     #    --launch-template-id ${LAUNCH_TEMPLATE%,*} --versions ${LAUNCH_TEMPLATE#*,}    \
-    #    --query 'LaunchTemplateVersions[0].LaunchTemplateData.   [NetworkInterfaces[0].Groups||SecurityGroupIds]' \
+    #    --query 'LaunchTemplateVersions[0].LaunchTemplateData.[NetworkInterfaces[0].Groups||SecurityGroupIds]' \
     #    --output text)
 
     aws ec2 create-tags \
