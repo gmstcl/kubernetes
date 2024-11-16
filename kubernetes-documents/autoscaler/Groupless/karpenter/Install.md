@@ -339,7 +339,7 @@ cat << EOF > controller-policy.json
         }
     ]
 }
-EOF
+    EOF
 
 aws iam put-role-policy \
     --role-name KarpenterControllerRole-${CLUSTER_NAME} \
