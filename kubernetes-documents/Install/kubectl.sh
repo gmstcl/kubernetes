@@ -19,5 +19,4 @@ echo "-------------------------------------------------------"
 # If you have an alias for kubectl, you can extend shell completion to work with that alias:
 
 echo 'alias k=kubectl' >>~/.bashrc
-echo 'complete -o default -F __start_kubectl k' >>~/.bashrc
 source ~/.bashrc
