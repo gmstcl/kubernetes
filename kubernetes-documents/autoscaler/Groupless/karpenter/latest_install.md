@@ -9,6 +9,6 @@ Install these tools before proceeding:
     AWS CLI
     kubectl - the Kubernetes CLI
     eksctl (>= v0.191.0) - the CLI for AWS EKS
-    helm - [the package manager for Kubernetes](https://helm.sh/docs/intro/install/)
+    helm - the package manager for Kubernetes
 
 Configure the AWS CLI with a user that has sufficient privileges to create an EKS cluster. Verify that the CLI can authenticate properly by running aws sts get-caller-identity.
