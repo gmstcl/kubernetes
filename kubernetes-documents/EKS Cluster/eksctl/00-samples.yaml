@@ -100,7 +100,7 @@ managedNodeGroups:
       - private-b
     tags:
       k8s.io/cluster-autoscaler/enabled: "true"
-      k8s.io/cluster-autoscaler/wsi-cluster: "owned"
+      k8s.io/cluster-autoscaler/demo-cluster: "owned"
     iam:
       withAddonPolicies:
         imageBuilder: true
