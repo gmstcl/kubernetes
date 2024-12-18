@@ -5,6 +5,10 @@
     -> kubectl
     -> EKS Cluster
     -> aws load balancer controller 
+```sh
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.0.0/standard-install.yaml
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.0.0/experimental-install.yaml
+```
 
 먼저 Kong API Gateway를 구성하기 위해서 , Helm을 이용하여 Kong을 설치합니다.
 ```sh
@@ -26,7 +30,6 @@ helm search repo kong
 #    env:
 #      LOG_LEVEL: trace
 #      dump_config: true
-
 gateway:
   admin:
     http:
@@ -102,7 +105,7 @@ metadata:
   name: kong-httproute
   namespace: wsi
   annotations:
-    konghq.com/strip-path: 'true'
+    konghq.com/strip-path: 'false'
 spec:
   parentRefs:
   - name: kong-gateway
@@ -113,7 +116,15 @@ spec:
         type: PathPrefix
         value: /v1/customer
     backendRefs:
-      - name: customer-svc
+      - name: customer-service
+        port: 80
+        kind: Service
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /healthcheck
+    backendRefs:
+      - name: customer-service
         port: 80
         kind: Service
   - matches:
@@ -121,7 +132,15 @@ spec:
         type: PathPrefix
         value: /v1/product
     backendRefs:
-      - name: product-svc
+      - name: product-service
+        port: 80
+        kind: Service
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /healthcheck
+    backendRefs:
+      - name: product-service
         port: 80
         kind: Service
   - matches:
@@ -129,7 +148,15 @@ spec:
         type: PathPrefix
         value: /v1/order
     backendRefs:
-      - name: order-svc
+      - name: order-service
+        port: 80
+        kind: Service
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /healthcheck
+    backendRefs:
+      - name: order-service
         port: 80
         kind: Service
 ```
