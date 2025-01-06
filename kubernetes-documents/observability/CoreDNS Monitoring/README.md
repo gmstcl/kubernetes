@@ -92,3 +92,11 @@ data:
 k apply -f aws-observability.yaml
 k rollout restart deploy/coredns -n kube-system
 ```
+
+### Log Table Query 문 
+
+```sh 
+fields @timestamp, @message, @logStream, @log
+| parse @message / (?<DNS>\[.*) /
+| display DNS
+| limit 10000
