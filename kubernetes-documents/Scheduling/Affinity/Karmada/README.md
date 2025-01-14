@@ -1,12 +1,32 @@
 # Karmada
 
 ## Intro 
-xxxxx
+이 글은 AWS EKS에 Karmada를 설치하고 멤버 클러스터로 또 다른 EKS clsuter를 등록하고 테스트하는 과정을 기록했습니다. Karmada는 자체적으로 고가용성을 유지하고 있습니다. 그리고 Multi-cluster을 이용할 때 karmada를 사용하시면 편하게 Cluster을 관리할 수 있습니다. 
+
+### 사전 준비 :
+  - AWS EKS Cluster - Staging-cluster  
+  - AWS EKS Cluster - prod-cluster  
+  - kubectl 
+  - eksctl 
 
 command :
 
-sudo curl -s https://raw.githubusercontent.com/karmada-io/karmada/master/hack/install-cli.sh | sudo bash -s kubectl-karmada
+우선 kubectl-karmada를 깔아줍니다. kubectl은 kubernetes을 조종하는 명령어라면, kubectl-karmada는 karmada를 조종하는 명령어입니다. 
 
+```sh
+sudo curl -s https://raw.githubusercontent.com/karmada-io/karmada/master/hack/install-cli.sh | sudo bash -s kubectl-karmada
+```
+
+그리고 ,,, karmada를 설치합니다. 만약에 아래와 같은 에러가 발생하게 될 경우에 아래와 같이 Security Groups을 수정합니다. 
+
+Security Groups : eks-cluster-sg-<cluster_name>-{number} inbound port: 32443 Source : Bastion-sg
+Security Groups : Bastion-sg inbound port: ALL Traffic Source : eks-cluster-sg-<cluster_name>-{number}
+
+```sh
+deploy.go:57] unable to create Namespace: Post "https://192.168.xx.xx:32443/api/v1/namespaces": dial tcp 192.168.xx.xx:32443: i/o timeout error
+```
+
+```sh
 (
   set -x; cd "$(mktemp -d)" &&
   OS="$(uname | tr '[:upper:]' '[:lower:]')" &&
@@ -20,10 +40,14 @@ sudo curl -s https://raw.githubusercontent.com/karmada-io/karmada/master/hack/in
 export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
 kubectl krew install karmada
 kubectl karmada init
+```
 
-생성안 될 시 계속 Restart 
+그리고 멤버클러스터 조인을 시켜줍니다. kubeconfig으로 동작을 하는데 ,, karmada를 이용할 때 불편함이 있긴 때문에 ~/.kube/config 파일을 karmada-apiserver.config으로 수정을 합니다. 그리고 개별적으로 Cluster에 접근을 할 수 있게 kubeconfig 파일을 생성합니다.  
 
+```sh
+aws eks update-kubeconfig --name staging-cluster 
 kubectl karmada --kubeconfig /etc/karmada/karmada-apiserver.config  join staging --cluster-kubeconfig=$HOME/.kube/config
+aws eks update-kubeconfig --name prod-cluster
 kubectl karmada --kubeconfig /etc/karmada/karmada-apiserver.config  join prod --cluster-kubeconfig=$HOME/.kube/config
 
 aws eks update-kubeconfig --name prod-cluster --kubeconfig ./prod.config
@@ -32,7 +56,11 @@ aws eks update-kubeconfig --name staging-cluster --kubeconfig ./staging.config
 cd ~/.kube/
 rm -rf config 
 ls -n config /etc/karmada/karmada-apiserver.config
+```
 
+resourceSelectors와 조건이 같은 경우에 clusterAffinity: 연결된 cluster에 배포를 하게 됩니다. karmada-apiserver는 이 PropagationPolicy을 보면서 동작을 하게 됩니다.
+
+```sh 
 apiVersion: policy.karmada.io/v1alpha1
 kind: PropagationPolicy
 metadata:
@@ -84,60 +112,8 @@ spec:
     clusterAffinity:
       clusterNames:
         - prod
+```sh
 
-helm upgrade -i argocd -n argocd argo/argo-cd --set crds.keep=false
-
-VERSION=$(curl --silent "https://api.github.com/repos/argoproj/argo-cd/releases/latest" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
-ARCH="amd64"
-sudo curl --silent --location -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/download/$VERSION/argocd-linux-$ARCH
-sudo chmod +x /usr/local/bin/argocd
-
-kp -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
-
-argocd login service address --username admin --password $? --insecure
-
-# 
-#
-# please ref.
-# https://github.com/argoproj/argo-cd/blob/master/docs/operator-manual/application.yaml
-# 
-# 
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: demo-app
-  # You'll usually want to add your resources to the argocd namespace.
-  namespace: argocd
-  # Add a this finalizer ONLY if you want these to cascade delete.
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
-spec:
-  # The project the application belongs to.
-  project: default
-
-  # Source of the application manifests
-  source:
-    repoURL: https://github.com/dispiny/demo-argo.git
-    targetRevision: HEAD
-    path: manifest
-
-  destination:
-    server: https://10.0.142.44:32443
-    namespace: default
-
-  syncPolicy:
-    automated: # automated sync by default retries failed attempts 5 times with following delays between attempts ( 5s, 10s, 20s, 40s, 80s ); retry controlled using `retry` field.
-      prune: true # Specifies if resources should be pruned during auto-syncing ( false by default ).
-      selfHeal: true # Specifies if partial app sync should be executed when resources are changed only in target Kubernetes cluster and no git change detected ( false by default ).
-      allowEmpty: false # Allows deleting all application resources during automatic syncing ( false by default ).
-    syncOptions:     # Sync options which modifies sync behavior
-    - Validate=false # disables resource validation (equivalent to 'kubectl apply --validate=false') ( true by default ).
-    - CreateNamespace=true # Namespace Auto-Creation ensures that namespace specified as the application destination exists in the destination cluster.
-    - PrunePropagationPolicy=foreground # Supported policies are background, foreground and orphan.
-    - PruneLast=true # Allow the ability for resource pruning to happen as a final, implicit wave of a sync operation
-    retry:
-      limit: 5 # number of failed sync attempt retries; unlimited number of attempts if less than 0
-      backoff:
-        duration: 5s # the amount to back off. Default unit is seconds, but could also be a duration (e.g. "2m", "1h")
-        factor: 2 # a factor to multiply the base duration after each failed retry
-        maxDuration: 3m # the maximum amount of time allowed for the backoff strategy
+```sh
+kubectl apply -f policy.yaml
+```
