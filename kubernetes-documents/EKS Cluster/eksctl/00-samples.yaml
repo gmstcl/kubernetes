@@ -6,6 +6,12 @@ metadata:
   version: "1.31"
   region: ap-northeast-2
 
+fargateProfiles:
+- name: service-nodes
+  selectors:
+  - namespace: default
+  - namespace: kube-system
+
 vpc:
   subnets:
     public:
@@ -14,6 +20,15 @@ vpc:
     private:
       private-a: { id: subnet-0582f5b2cf19554e8 }
       private-b: { id: subnet-0035d77753e619793 }
+
+accessConfig:
+  authenticationMode: API_AND_CONFIG_MAP
+  accessEntries:
+    - principalARN: arn:aws:iam::226347592148:role/demo-bastion-role
+      accessPolicies:
+        - policyARN: arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy
+          accessScope:
+            type: cluster
 
 iamIdentityMappings:
   - arn: arn:aws:iam::226347592148:role/root
@@ -83,6 +98,16 @@ iam:
         - "autoscaling:TerminateInstanceInAutoScalingGroup"
         - "ec2:DescribeLaunchTemplateVersions"
         Resource: '*'
+  - metadata: 
+      name: amazon-cloudwatch-observability
+      namespace: amazon-cloudwatch
+      labels: 
+        aws-usage: "observability"
+    attachPolicyARNs:
+      - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+      - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+    roleName: batch4eks-cluster-amazon-cloudwatch-observability-role
+    roleOnly: true
 
 managedNodeGroups:
   - name: demo-app-ng
@@ -107,3 +132,15 @@ managedNodeGroups:
         externalDNS: true
         certManager: true
         cloudWatch: true
+
+addons: 
+- name: aws-ebs-csi-driver
+  version: latest
+  wellKnownPolicies: 
+    ebsCSIController: true
+- name: amazon-cloudwatch-observability
+  version: latest
+  attachPolicyARNs:
+    - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+    - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+  configurationValues: "{\"tolerations\": [{\"key\": \"batch.amazonaws.com/batch-node\",  \"operator\": \"Exists\" }]}"
