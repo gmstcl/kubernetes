@@ -24,7 +24,7 @@ vpc:
 accessConfig:
   authenticationMode: API_AND_CONFIG_MAP
   accessEntries:
-    - principalARN: arn:aws:iam::226347592148:role/demo-bastion-role
+    - principalARN: arn:aws:iam::226347592148:root
       accessPolicies:
         - policyARN: arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy
           accessScope:
