@@ -6,12 +6,6 @@ metadata:
   version: "1.31"
   region: ap-northeast-2
 
-fargateProfiles:
-- name: service-nodes
-  selectors:
-  - namespace: default
-  - namespace: kube-system
-
 vpc:
   subnets:
     public:
