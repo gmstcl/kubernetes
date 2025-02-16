@@ -15,15 +15,6 @@ vpc:
       private-a: { id: subnet-0582f5b2cf19554e8 }
       private-b: { id: subnet-0035d77753e619793 }
 
-accessConfig:
-  authenticationMode: API_AND_CONFIG_MAP
-  accessEntries:
-    - principalARN: arn:aws:iam::226347592148:root
-      accessPolicies:
-        - policyARN: arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy
-          accessScope:
-            type: cluster
-
 iamIdentityMappings:
   - arn: arn:aws:iam::226347592148:role/root
     groups:
@@ -126,15 +117,3 @@ managedNodeGroups:
         externalDNS: true
         certManager: true
         cloudWatch: true
-
-addons: 
-- name: aws-ebs-csi-driver
-  version: latest
-  wellKnownPolicies: 
-    ebsCSIController: true
-- name: amazon-cloudwatch-observability
-  version: latest
-  attachPolicyARNs:
-    - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
-    - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
-  configurationValues: "{\"tolerations\": [{\"key\": \"batch.amazonaws.com/batch-node\",  \"operator\": \"Exists\" }]}"
